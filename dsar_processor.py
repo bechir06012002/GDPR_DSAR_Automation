@@ -2,7 +2,7 @@
 GDPR DSAR Processor - FastAPI Backend with OpenAI
 Handles: Deduplication, PII Classification, Data Aggregation
 """
-
+from typing import Optional
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List, Dict, Any
@@ -62,7 +62,9 @@ class ProcessDSARResponse(BaseModel):
     pii_summary: Dict[str, int]
     data_by_category: Dict[str, List[ProcessedRecord]]
     processed_at: str
-    error_message: str = None
+    # Make it optional with None as default
+    error_message: Optional[str] = None
+
 
 # DEDUPLICATION
 
