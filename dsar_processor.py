@@ -1,9 +1,12 @@
 """
 GDPR DSAR Processor - FastAPI Backend with OpenAI
 Handles: Deduplication, PII Classification, Data Aggregation
+Includes: Integrated Approval Dashboard
 """
 from typing import Optional
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any
 import json
@@ -247,9 +250,48 @@ async def health_check():
         "service": "GDPR DSAR Processor"
     }
 
+
+# DASHBOARD ROUTES - Static Files
+
+# Mount static files (dashboard)
+if os.path.exists("static"):
+    app.mount("/dashboard", StaticFiles(directory="static",
+              html=True), name="static")
+    logger.info("Dashboard mounted at /dashboard")
+
+
+@app.get("/")
+async def root():
+    """Serve dashboard homepage"""
+    if os.path.exists("static/index.html"):
+        return FileResponse("static/index.html")
+    else:
+        return {
+            "message": "GDPR DSAR Processor API",
+            "version": "1.0.0",
+            "endpoints": {
+                "health": "/health",
+                "process_dsar": "/process-dsar",
+                "dashboard": "/dashboard or /"
+            }
+        }
+
+
+@app.get("/api/status")
+async def api_status():
+    """API Status endpoint for dashboard"""
+    return {
+        "status": "online",
+        "service": "GDPR DSAR Processor",
+        "version": "1.0.0",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
     logger.info(f"Starting DSAR Processor on {host}:{port}")
+    logger.info("Dashboard available at http://localhost:{port}/")
     uvicorn.run(app, host=host, port=port, log_level="info")
