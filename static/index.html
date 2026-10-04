@@ -113,10 +113,6 @@
             opacity: 0.7;
         }
 
-        .queue-item.processing {
-            opacity: 0.5;
-        }
-
         .item-header {
             display: grid;
             grid-template-columns: 1fr 200px;
@@ -182,14 +178,14 @@
         }
 
         .delivery-status-badge {
-            display: inline-block;
+            background: #c8e6c9;
+            color: #2e7d32;
             padding: 2px 8px;
             border-radius: 12px;
             font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
-            background: #c8e6c9;
-            color: #2e7d32;
+            display: inline-block;
         }
 
         .risk-badge {
@@ -238,11 +234,6 @@
         .status-denied {
             background: #ffcdd2;
             color: #c62828;
-        }
-
-        .status-delivered {
-            background: #c8e6c9;
-            color: #2e7d32;
         }
 
         .actions {
@@ -295,11 +286,6 @@
             color: #999;
         }
 
-        .empty-state h3 {
-            font-size: 18px;
-            margin-bottom: 10px;
-        }
-
         .loading {
             text-align: center;
             padding: 40px;
@@ -345,33 +331,17 @@
             border: 1px solid #f5c6cb;
         }
 
-        .alert-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
         @media (max-width: 768px) {
             .item-header {
                 grid-template-columns: 1fr;
-                gap: 15px;
             }
 
             .delivery-item {
                 grid-template-columns: 1fr;
-                gap: 5px;
             }
 
             .actions {
                 flex-direction: row;
-            }
-
-            .header {
-                padding: 20px;
-            }
-
-            .dashboard {
-                padding: 20px;
             }
         }
     </style>
@@ -412,37 +382,27 @@
     </div>
 
     <script>
-        // Initialize Supabase
         const SUPABASE_URL = 'https://hyeyyduurqrsmdpztffh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5ZXl5ZHV1cnFyc21kcHp0ZmZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwMDg5NjcsImV4cCI6MjEwNjU4NDk2N30.PydqFgv853Mt152yKDP8zV1F5LIqorTGE46199acIMI';
 
-        let supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        let stats = {
-            pending: 0,
-            approved: 0,
-            delivered: 0
-        };
-
-        // Load data on page load
         document.addEventListener('DOMContentLoaded', () => {
             loadApprovalQueue();
-            // Refresh every 5 seconds
             setInterval(loadApprovalQueue, 5000);
         });
 
         async function loadApprovalQueue() {
             try {
-                const { data, error } = await supabase
+                const { data, error } = await supabaseClient
                     .from('approval_queue')
                     .select('*')
                     .order('created_at', { ascending: false });
 
                 if (error) throw error;
 
-                // For each queue item, fetch delivery info
                 for (let item of data || []) {
-                    const { data: deliveries } = await supabase
+                    const { data: deliveries } = await supabaseClient
                         .from('dsar_deliveries')
                         .select('*')
                         .eq('dsar_id', item.dsar_id);
@@ -452,8 +412,7 @@
                 renderQueue(data || []);
                 updateStats(data || []);
             } catch (error) {
-                showAlert('Error loading queue: ' + error.message, 'error');
-                console.error('Error:', error);
+                showAlert('Error: ' + error.message, 'error');
             }
         }
 
@@ -461,184 +420,87 @@
             const container = document.getElementById('queue-container');
 
             if (items.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <h3>✅ All caught up!</h3>
-                        <p>No pending DSAR requests to review.</p>
-                    </div>
-                `;
+                container.innerHTML = '<div class="empty-state"><h3>✅ All caught up!</h3><p>No pending requests.</p></div>';
                 return;
             }
 
-            container.innerHTML = `
-                <div class="queue-list">
-                    ${items.map(item => renderQueueItem(item)).join('')}
-                </div>
-            `;
+            container.innerHTML = `<div class="queue-list">${items.map(item => renderQueueItem(item)).join('')}</div>`;
 
-            // Add event listeners
             items.forEach(item => {
-                document.getElementById(`approve-${item.id}`)?.addEventListener('click', () => approveRequest(item.id, item.dsar_id));
-                document.getElementById(`deny-${item.id}`)?.addEventListener('click', () => denyRequest(item.id, item.dsar_id));
+                document.getElementById(`approve-${item.id}`)?.addEventListener('click', () => approveRequest(item.id));
+                document.getElementById(`deny-${item.id}`)?.addEventListener('click', () => denyRequest(item.id));
             });
         }
 
         function renderQueueItem(item) {
             const riskClass = `risk-${(item.risk_level || 'high').toLowerCase()}`;
-            const statusClass = `status-${(item.status || 'pending').toLowerCase()}`;
-            const createdDate = new Date(item.created_at).toLocaleString();
-            const isProcessing = item.status !== 'pending';
-
-            // Get delivery info
+            const statusClass = `status-${item.status}`;
             const pdfDelivery = (item.deliveries || []).find(d => d.delivery_type === 'pdf');
             const passwordDelivery = (item.deliveries || []).find(d => d.delivery_type === 'password');
+            const isProcessing = item.status !== 'pending';
 
             const deliveryHTML = (pdfDelivery || passwordDelivery) ? `
                 <div class="delivery-section">
                     <h4>📧 Delivery Status</h4>
-                    ${pdfDelivery ? `
-                        <div class="delivery-item">
-                            <span class="delivery-type">📄 PDF</span>
-                            <span class="delivery-timestamp">${new Date(pdfDelivery.sent_at).toLocaleString()}</span>
-                            <span class="delivery-status-badge">${pdfDelivery.status}</span>
-                        </div>
-                    ` : ''}
-                    ${passwordDelivery ? `
-                        <div class="delivery-item">
-                            <span class="delivery-type">🔑 Password</span>
-                            <span class="delivery-timestamp">${new Date(passwordDelivery.sent_at).toLocaleString()}</span>
-                            <span class="delivery-status-badge">${passwordDelivery.status}</span>
-                        </div>
-                    ` : ''}
+                    ${pdfDelivery ? `<div class="delivery-item"><span class="delivery-type">📄 PDF</span><span class="delivery-timestamp">${new Date(pdfDelivery.sent_at).toLocaleString()}</span><span class="delivery-status-badge">sent</span></div>` : ''}
+                    ${passwordDelivery ? `<div class="delivery-item"><span class="delivery-type">🔑 Password</span><span class="delivery-timestamp">${new Date(passwordDelivery.sent_at).toLocaleString()}</span><span class="delivery-status-badge">sent</span></div>` : ''}
                 </div>
             ` : '';
 
             return `
-                <div class="queue-item ${item.status}" ${isProcessing ? 'class="queue-item ' + item.status + ' processing"' : ''}>
-                    <div>
-                        <div class="item-header">
-                            <div class="item-details">
-                                <div class="detail-row">
-                                    <span class="detail-label">Request ID</span>
-                                    <span class="detail-value"><code>${item.dsar_id.substring(0, 8)}</code></span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Risk Level</span>
-                                    <span class="detail-value">
-                                        <span class="risk-badge ${riskClass}">${item.risk_level || 'UNKNOWN'}</span>
-                                    </span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Status</span>
-                                    <span class="detail-value">
-                                        <span class="status-badge ${statusClass}">${item.status}</span>
-                                    </span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Notes</span>
-                                    <span class="detail-value">${item.notes || 'No notes'}</span>
-                                </div>
-                                <div class="detail-row">
-                                    <span class="detail-label">Submitted</span>
-                                    <span class="detail-value">${createdDate}</span>
-                                </div>
-                            </div>
-                            ${isProcessing ? '' : `
-                                <div class="actions">
-                                    <button 
-                                        class="btn-approve" 
-                                        id="approve-${item.id}"
-                                    >
-                                        ✓ Approve
-                                    </button>
-                                    <button 
-                                        class="btn-deny" 
-                                        id="deny-${item.id}"
-                                    >
-                                        ✗ Deny
-                                    </button>
-                                </div>
-                            `}
+                <div class="queue-item ${item.status}">
+                    <div class="item-header">
+                        <div class="item-details">
+                            <div class="detail-row"><span class="detail-label">ID</span><span class="detail-value"><code>${item.dsar_id.substring(0, 8)}</code></span></div>
+                            <div class="detail-row"><span class="detail-label">Risk</span><span class="detail-value"><span class="risk-badge ${riskClass}">${item.risk_level}</span></span></div>
+                            <div class="detail-row"><span class="detail-label">Status</span><span class="detail-value"><span class="status-badge ${statusClass}">${item.status}</span></span></div>
+                            <div class="detail-row"><span class="detail-label">Notes</span><span class="detail-value">${item.notes || 'None'}</span></div>
                         </div>
-                        ${deliveryHTML}
+                        ${!isProcessing ? `
+                            <div class="actions">
+                                <button class="btn-approve" id="approve-${item.id}">✓ Approve</button>
+                                <button class="btn-deny" id="deny-${item.id}">✗ Deny</button>
+                            </div>
+                        ` : ''}
                     </div>
+                    ${deliveryHTML}
                 </div>
             `;
         }
 
-        async function approveRequest(queueId, dsarId) {
-            if (!confirm('Are you sure you want to APPROVE this DSAR request? The encrypted PDF will be sent to the data subject.')) {
-                return;
-            }
-
+        async function approveRequest(queueId) {
+            if (!confirm('Approve this DSAR?')) return;
             try {
-                const { error } = await supabase
-                    .from('approval_queue')
-                    .update({
-                        status: 'approved',
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', queueId);
-
-                if (error) throw error;
-
-                showAlert('✅ DSAR approved! Encrypted PDF will be sent to the data subject.', 'success');
+                await supabaseClient.from('approval_queue').update({ status: 'approved', updated_at: new Date().toISOString() }).eq('id', queueId);
+                showAlert('✅ Approved!', 'success');
                 loadApprovalQueue();
             } catch (error) {
-                showAlert('Error approving request: ' + error.message, 'error');
-                console.error('Error:', error);
+                showAlert('Error: ' + error.message, 'error');
             }
         }
 
-        async function denyRequest(queueId, dsarId) {
-            const reason = prompt('Please provide a reason for denying this request:');
-            if (reason === null) return;
-
+        async function denyRequest(queueId) {
+            const reason = prompt('Reason:');
+            if (!reason) return;
             try {
-                const { error } = await supabase
-                    .from('approval_queue')
-                    .update({
-                        status: 'denied',
-                        notes: reason,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', queueId);
-
-                if (error) throw error;
-
-                showAlert('❌ DSAR denied. Data subject will be notified.', 'success');
+                await supabaseClient.from('approval_queue').update({ status: 'denied', notes: reason, updated_at: new Date().toISOString() }).eq('id', queueId);
+                showAlert('❌ Denied!', 'success');
                 loadApprovalQueue();
             } catch (error) {
-                showAlert('Error denying request: ' + error.message, 'error');
-                console.error('Error:', error);
+                showAlert('Error: ' + error.message, 'error');
             }
         }
 
         function updateStats(items) {
-            stats = {
-                pending: items.filter(i => i.status === 'pending').length,
-                approved: items.filter(i => i.status === 'approved').length,
-                delivered: items.filter(i => i.deliveries && i.deliveries.length > 0).length
-            };
-
-            document.getElementById('total-pending').textContent = stats.pending;
-            document.getElementById('total-approved').textContent = stats.approved;
-            document.getElementById('total-delivered').textContent = stats.delivered;
+            document.getElementById('total-pending').textContent = items.filter(i => i.status === 'pending').length;
+            document.getElementById('total-approved').textContent = items.filter(i => i.status === 'approved').length;
+            document.getElementById('total-delivered').textContent = items.filter(i => i.deliveries?.length > 0).length;
         }
 
         function showAlert(message, type) {
-            const alertsContainer = document.getElementById('alerts');
             const alertId = 'alert-' + Date.now();
-
-            alertsContainer.innerHTML += `
-                <div class="alert alert-${type}" id="${alertId}">
-                    ${message}
-                </div>
-            `;
-
-            setTimeout(() => {
-                document.getElementById(alertId)?.remove();
-            }, 5000);
+            document.getElementById('alerts').innerHTML += `<div class="alert alert-${type}" id="${alertId}">${message}</div>`;
+            setTimeout(() => document.getElementById(alertId)?.remove(), 5000);
         }
     </script>
 </body>
