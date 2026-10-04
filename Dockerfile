@@ -10,5 +10,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Copy app code
 COPY dsar_processor.py .
 
+# Copy dashboard static files
+COPY static/ static/
+
 # Run app
 CMD ["python", "-m", "uvicorn", "dsar_processor:app", "--host", "0.0.0.0", "--port", "8000"]
