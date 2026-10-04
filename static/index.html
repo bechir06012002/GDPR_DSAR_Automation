@@ -416,7 +416,7 @@
         const SUPABASE_URL = 'https://hyeyyduurqrsmdpztffh.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh5ZXl5ZHV1cnFyc21kcHp0ZmZoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwMDg5NjcsImV4cCI6MjEwNjU4NDk2N30.PydqFgv853Mt152yKDP8zV1F5LIqorTGE46199acIMI';
 
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        let supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         let stats = {
             pending: 0,
