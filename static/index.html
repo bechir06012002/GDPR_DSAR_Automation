@@ -94,10 +94,6 @@
             border: 1px solid #e0e0e0;
             border-radius: 8px;
             padding: 20px;
-            display: grid;
-            grid-template-columns: 1fr 200px;
-            gap: 20px;
-            align-items: center;
             transition: all 0.3s ease;
             background: #fafafa;
         }
@@ -121,6 +117,14 @@
             opacity: 0.5;
         }
 
+        .item-header {
+            display: grid;
+            grid-template-columns: 1fr 200px;
+            gap: 20px;
+            margin-bottom: 15px;
+            align-items: start;
+        }
+
         .item-details {
             display: grid;
             gap: 12px;
@@ -140,6 +144,52 @@
 
         .detail-value {
             color: #333;
+        }
+
+        .delivery-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .delivery-section h4 {
+            color: #667eea;
+            font-size: 13px;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .delivery-item {
+            display: grid;
+            grid-template-columns: 120px 1fr 80px;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .delivery-type {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .delivery-timestamp {
+            color: #666;
+        }
+
+        .delivery-status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            background: #c8e6c9;
+            color: #2e7d32;
         }
 
         .risk-badge {
@@ -190,6 +240,11 @@
             color: #c62828;
         }
 
+        .status-delivered {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+
         .actions {
             display: flex;
             gap: 10px;
@@ -238,13 +293,6 @@
             text-align: center;
             padding: 60px 20px;
             color: #999;
-        }
-
-        .empty-state svg {
-            width: 80px;
-            height: 80px;
-            margin-bottom: 20px;
-            opacity: 0.5;
         }
 
         .empty-state h3 {
@@ -304,9 +352,14 @@
         }
 
         @media (max-width: 768px) {
-            .queue-item {
+            .item-header {
                 grid-template-columns: 1fr;
                 gap: 15px;
+            }
+
+            .delivery-item {
+                grid-template-columns: 1fr;
+                gap: 5px;
             }
 
             .actions {
@@ -340,14 +393,14 @@
                     <div class="label">Approved</div>
                 </div>
                 <div class="stat-card">
-                    <div class="number" id="total-denied">0</div>
-                    <div class="label">Denied</div>
+                    <div class="number" id="total-delivered">0</div>
+                    <div class="label">Delivered</div>
                 </div>
             </div>
         </div>
 
         <div class="dashboard">
-            <h2>Approval Queue</h2>
+            <h2>Approval Queue & Delivery Status</h2>
             <div id="alerts"></div>
             <div id="queue-container">
                 <div class="loading">
@@ -368,7 +421,7 @@
         let stats = {
             pending: 0,
             approved: 0,
-            denied: 0
+            delivered: 0
         };
 
         // Load data on page load
@@ -386,6 +439,15 @@
                     .order('created_at', { ascending: false });
 
                 if (error) throw error;
+
+                // For each queue item, fetch delivery info
+                for (let item of data || []) {
+                    const { data: deliveries } = await supabase
+                        .from('dsar_deliveries')
+                        .select('*')
+                        .eq('dsar_id', item.dsar_id);
+                    item.deliveries = deliveries || [];
+                }
 
                 renderQueue(data || []);
                 updateStats(data || []);
@@ -427,49 +489,78 @@
             const createdDate = new Date(item.created_at).toLocaleString();
             const isProcessing = item.status !== 'pending';
 
+            // Get delivery info
+            const pdfDelivery = (item.deliveries || []).find(d => d.delivery_type === 'pdf');
+            const passwordDelivery = (item.deliveries || []).find(d => d.delivery_type === 'password');
+
+            const deliveryHTML = (pdfDelivery || passwordDelivery) ? `
+                <div class="delivery-section">
+                    <h4>📧 Delivery Status</h4>
+                    ${pdfDelivery ? `
+                        <div class="delivery-item">
+                            <span class="delivery-type">📄 PDF</span>
+                            <span class="delivery-timestamp">${new Date(pdfDelivery.sent_at).toLocaleString()}</span>
+                            <span class="delivery-status-badge">${pdfDelivery.status}</span>
+                        </div>
+                    ` : ''}
+                    ${passwordDelivery ? `
+                        <div class="delivery-item">
+                            <span class="delivery-type">🔑 Password</span>
+                            <span class="delivery-timestamp">${new Date(passwordDelivery.sent_at).toLocaleString()}</span>
+                            <span class="delivery-status-badge">${passwordDelivery.status}</span>
+                        </div>
+                    ` : ''}
+                </div>
+            ` : '';
+
             return `
                 <div class="queue-item ${item.status}" ${isProcessing ? 'class="queue-item ' + item.status + ' processing"' : ''}>
-                    <div class="item-details">
-                        <div class="detail-row">
-                            <span class="detail-label">Request ID</span>
-                            <span class="detail-value"><code>${item.dsar_id.substring(0, 8)}</code></span>
+                    <div>
+                        <div class="item-header">
+                            <div class="item-details">
+                                <div class="detail-row">
+                                    <span class="detail-label">Request ID</span>
+                                    <span class="detail-value"><code>${item.dsar_id.substring(0, 8)}</code></span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Risk Level</span>
+                                    <span class="detail-value">
+                                        <span class="risk-badge ${riskClass}">${item.risk_level || 'UNKNOWN'}</span>
+                                    </span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Status</span>
+                                    <span class="detail-value">
+                                        <span class="status-badge ${statusClass}">${item.status}</span>
+                                    </span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Notes</span>
+                                    <span class="detail-value">${item.notes || 'No notes'}</span>
+                                </div>
+                                <div class="detail-row">
+                                    <span class="detail-label">Submitted</span>
+                                    <span class="detail-value">${createdDate}</span>
+                                </div>
+                            </div>
+                            ${isProcessing ? '' : `
+                                <div class="actions">
+                                    <button 
+                                        class="btn-approve" 
+                                        id="approve-${item.id}"
+                                    >
+                                        ✓ Approve
+                                    </button>
+                                    <button 
+                                        class="btn-deny" 
+                                        id="deny-${item.id}"
+                                    >
+                                        ✗ Deny
+                                    </button>
+                                </div>
+                            `}
                         </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Risk Level</span>
-                            <span class="detail-value">
-                                <span class="risk-badge ${riskClass}">${item.risk_level || 'UNKNOWN'}</span>
-                            </span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Status</span>
-                            <span class="detail-value">
-                                <span class="status-badge ${statusClass}">${item.status}</span>
-                            </span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Notes</span>
-                            <span class="detail-value">${item.notes || 'No notes'}</span>
-                        </div>
-                        <div class="detail-row">
-                            <span class="detail-label">Submitted</span>
-                            <span class="detail-value">${createdDate}</span>
-                        </div>
-                    </div>
-                    <div class="actions">
-                        <button 
-                            class="btn-approve" 
-                            id="approve-${item.id}"
-                            ${isProcessing ? 'disabled' : ''}
-                        >
-                            ✓ Approve
-                        </button>
-                        <button 
-                            class="btn-deny" 
-                            id="deny-${item.id}"
-                            ${isProcessing ? 'disabled' : ''}
-                        >
-                            ✗ Deny
-                        </button>
+                        ${deliveryHTML}
                     </div>
                 </div>
             `;
@@ -493,9 +584,6 @@
 
                 showAlert('✅ DSAR approved! Encrypted PDF will be sent to the data subject.', 'success');
                 loadApprovalQueue();
-
-                // Optional: Trigger n8n webhook to send PDF
-                // await triggerApprovalWebhook(dsarId, 'approved');
             } catch (error) {
                 showAlert('Error approving request: ' + error.message, 'error');
                 console.error('Error:', error);
@@ -520,9 +608,6 @@
 
                 showAlert('❌ DSAR denied. Data subject will be notified.', 'success');
                 loadApprovalQueue();
-
-                // Optional: Trigger n8n webhook to notify denial
-                // await triggerApprovalWebhook(dsarId, 'denied', reason);
             } catch (error) {
                 showAlert('Error denying request: ' + error.message, 'error');
                 console.error('Error:', error);
@@ -533,12 +618,12 @@
             stats = {
                 pending: items.filter(i => i.status === 'pending').length,
                 approved: items.filter(i => i.status === 'approved').length,
-                denied: items.filter(i => i.status === 'denied').length
+                delivered: items.filter(i => i.deliveries && i.deliveries.length > 0).length
             };
 
             document.getElementById('total-pending').textContent = stats.pending;
             document.getElementById('total-approved').textContent = stats.approved;
-            document.getElementById('total-denied').textContent = stats.denied;
+            document.getElementById('total-delivered').textContent = stats.delivered;
         }
 
         function showAlert(message, type) {
@@ -554,26 +639,6 @@
             setTimeout(() => {
                 document.getElementById(alertId)?.remove();
             }, 5000);
-        }
-
-        // Optional: Trigger n8n webhook for approval actions
-        async function triggerApprovalWebhook(dsarId, action, reason = '') {
-            try {
-                await fetch('https://bechir2002.app.n8n.cloud/webhook-test/dsar-approval', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        dsar_id: dsarId,
-                        action: action,
-                        reason: reason,
-                        approved_at: new Date().toISOString()
-                    })
-                });
-            } catch (error) {
-                console.log('Webhook trigger (optional):', error.message);
-            }
         }
     </script>
 </body>
